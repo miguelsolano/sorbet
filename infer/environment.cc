@@ -769,7 +769,7 @@ core::TypePtr flattenArrays(core::Context ctx, core::TypePtr type) {
             result = a->targs.front();
         },
 
-        [&](core::TupleType *t) { result = t->elementType(); },
+        [&](core::TupleType *t) { result = t->elementType(ctx); },
 
         [&](core::Type *t) { result = std::move(type); });
     return result;
@@ -1112,8 +1112,9 @@ core::TypePtr Environment::processBinding(core::Context ctx, const cfg::CFG &inW
                     } else if (!core::Types::isSubType(ctx, ty.type, castType)) {
                         if (auto e = ctx.beginError(bind.loc, core::errors::Infer::CastTypeMismatch)) {
                             e.setHeader("Argument does not have asserted type `{}`", castType->show(ctx));
-                            e.addErrorSection(core::ErrorSection("Got " + ty.type->show(ctx) + " originating from:",
-                                                                 ty.origins2Explanations(ctx)));
+                            e.addErrorSection(
+                                core::ErrorSection("Got " + ty.type->showWithMoreInfo(ctx) + " originating from:",
+                                                   ty.origins2Explanations(ctx)));
                         }
                     }
                 } else if (!c->isSynthetic) {
@@ -1150,8 +1151,8 @@ core::TypePtr Environment::processBinding(core::Context ctx, const cfg::CFG &inW
             const core::TypeAndOrigins &cur =
                 (pin != pinnedTypes.end()) ? pin->second : getTypeAndOrigin(ctx, bind.bind.variable);
 
-            bool asGoodAs =
-                core::Types::isSubType(ctx, core::Types::dropLiteral(tp.type), core::Types::dropLiteral(cur.type));
+            bool asGoodAs = core::Types::isSubType(ctx, core::Types::dropLiteral(ctx, tp.type),
+                                                   core::Types::dropLiteral(ctx, cur.type));
 
             {
                 switch (bindMinLoops) {

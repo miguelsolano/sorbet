@@ -177,7 +177,7 @@ SimilarMethodsByName similarMethodsForReceiver(const core::GlobalState &gs, cons
             result = mergeSimilarMethods(similarMethodsForReceiver(gs, type->left, prefix),
                                          similarMethodsForReceiver(gs, type->right, prefix));
         },
-        [&](core::ProxyType *type) { result = similarMethodsForReceiver(gs, type->underlying(), prefix); },
+        [&](core::ProxyType *type) { result = similarMethodsForReceiver(gs, type->underlying(gs), prefix); },
         [&](core::Type *type) { return; });
 
     return result;

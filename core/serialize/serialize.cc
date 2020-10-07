@@ -363,14 +363,12 @@ void SerializerImpl::pickle(Pickler &p, Type *what) {
         pickle(p, a->right.get());
     } else if (auto *arr = cast_type<TupleType>(what)) {
         p.putU4(5);
-        pickle(p, arr->underlying().get());
         p.putU4(arr->elems.size());
         for (auto &el : arr->elems) {
             pickle(p, el.get());
         }
     } else if (auto *hash = cast_type<ShapeType>(what)) {
         p.putU4(6);
-        pickle(p, hash->underlying().get());
         p.putU4(hash->keys.size());
         ENFORCE(hash->keys.size() == hash->values.size());
         for (auto &el : hash->keys) {
@@ -438,17 +436,15 @@ TypePtr SerializerImpl::unpickleType(UnPickler &p, const GlobalState *gs) {
         case 4:
             return AndType::make_shared(unpickleType(p, gs), unpickleType(p, gs));
         case 5: {
-            auto underlying = unpickleType(p, gs);
             int sz = p.getU4();
             vector<TypePtr> elems(sz);
             for (auto &elem : elems) {
                 elem = unpickleType(p, gs);
             }
-            auto result = make_type<TupleType>(underlying, std::move(elems));
+            auto result = make_type<TupleType>(std::move(elems));
             return result;
         }
         case 6: {
-            auto underlying = unpickleType(p, gs);
             int sz = p.getU4();
             vector<TypePtr> keys(sz);
             vector<TypePtr> values(sz);
@@ -458,7 +454,7 @@ TypePtr SerializerImpl::unpickleType(UnPickler &p, const GlobalState *gs) {
             for (auto &value : values) {
                 value = unpickleType(p, gs);
             }
-            auto result = make_type<ShapeType>(underlying, keys, values);
+            auto result = make_type<ShapeType>(keys, values);
             return result;
         }
         case 7:

@@ -244,7 +244,7 @@ core::TypePtr getResultType(const core::GlobalState &gs, core::TypePtr type, cor
                             core::TypePtr receiver, const core::TypeConstraint *constr) {
     auto resultType = type;
     if (auto *proxy = core::cast_type<core::ProxyType>(receiver.get())) {
-        receiver = proxy->underlying();
+        receiver = proxy->underlying(gs);
     }
     if (auto *applied = core::cast_type<core::AppliedType>(receiver.get())) {
         /* instantiate generic classes */

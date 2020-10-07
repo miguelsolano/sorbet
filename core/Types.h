@@ -146,14 +146,14 @@ public:
      */
     static TypePtr approximate(const GlobalState &gs, const TypePtr &what, const TypeConstraint &tc);
     static TypePtr dispatchCallWithoutBlock(const GlobalState &gs, const TypePtr &recv, DispatchArgs args);
-    static TypePtr dropLiteral(const TypePtr &tp);
+    static TypePtr dropLiteral(const GlobalState &gs, const TypePtr &tp);
 
     /** Internal implementation. You should probably use all(). */
     static TypePtr glb(const GlobalState &gs, const TypePtr &t1, const TypePtr &t2);
     /** Internal implementation. You should probably use any(). */
     static TypePtr lub(const GlobalState &gs, const TypePtr &t1, const TypePtr &t2);
 
-    static TypePtr lubAll(const GlobalState &gs, std::vector<TypePtr> &elements);
+    static TypePtr lubAll(const GlobalState &gs, const std::vector<TypePtr> &elements);
     static TypePtr arrayOf(const GlobalState &gs, const TypePtr &elem);
     static TypePtr rangeOf(const GlobalState &gs, const TypePtr &elem);
     static TypePtr hashOf(const GlobalState &gs, const TypePtr &elem);
@@ -251,7 +251,7 @@ class GroundType : public Type {};
 class ProxyType : public Type {
 public:
     // TODO: use shared pointers that use inline counter
-    virtual TypePtr underlying() const = 0;
+    virtual TypePtr underlying(const GlobalState &gs) const = 0;
     ProxyType() = default;
 
     virtual DispatchResult dispatchCall(const GlobalState &gs, DispatchArgs args) override;
@@ -394,7 +394,7 @@ public:
     LiteralType(double val);
     LiteralType(SymbolRef klass, NameRef val);
     LiteralType(bool val);
-    virtual TypePtr underlying() const override;
+    virtual TypePtr underlying(const GlobalState &gs) const override;
 
     virtual std::string toStringWithTabs(const GlobalState &gs, int tabs = 0) const final;
     virtual std::string show(const GlobalState &gs) const final;
@@ -402,7 +402,7 @@ public:
     virtual std::string typeName() const override;
     virtual bool isFullyDefined() final;
 
-    bool equals(const LiteralType &rhs) const;
+    bool equals(const GlobalState &gs, const LiteralType &rhs) const;
 
     virtual TypePtr _instantiate(const GlobalState &gs, const InlinedVector<SymbolRef, 4> &params,
                                  const std::vector<TypePtr> &targs) override;
@@ -537,12 +537,12 @@ class ShapeType final : public ProxyType {
 public:
     std::vector<TypePtr> keys; // TODO: store sorted by whatever
     std::vector<TypePtr> values;
-    const TypePtr underlying_;
     ShapeType();
-    ShapeType(TypePtr underlying, std::vector<TypePtr> keys, std::vector<TypePtr> values);
+    ShapeType(std::vector<TypePtr> keys, std::vector<TypePtr> values);
 
     virtual std::string toStringWithTabs(const GlobalState &gs, int tabs = 0) const final;
     virtual std::string show(const GlobalState &gs) const final;
+    virtual std::string showWithMoreInfo(const GlobalState &gs) const final;
     virtual std::string typeName() const override;
     virtual DispatchResult dispatchCall(const GlobalState &gs, DispatchArgs args) final;
     void _sanityCheck(const GlobalState &gs) final;
@@ -554,7 +554,7 @@ public:
     virtual bool hasUntyped() override;
     virtual TypePtr _approximate(const GlobalState &gs, const TypeConstraint &tc) override;
     virtual TypePtr _instantiate(const GlobalState &gs, const TypeConstraint &tc) override;
-    virtual TypePtr underlying() const override;
+    virtual TypePtr underlying(const GlobalState &gs) const override;
 };
 CheckSize(ShapeType, 72, 8);
 
@@ -564,10 +564,8 @@ private:
 
 public:
     std::vector<TypePtr> elems;
-    const TypePtr underlying_;
 
-    TupleType(TypePtr underlying, std::vector<TypePtr> elements);
-    static TypePtr build(const GlobalState &gs, std::vector<TypePtr> elements);
+    TupleType(std::vector<TypePtr> elements);
 
     virtual std::string toStringWithTabs(const GlobalState &gs, int tabs = 0) const final;
     virtual std::string show(const GlobalState &gs) const final;
@@ -585,8 +583,8 @@ public:
     virtual TypePtr _instantiate(const GlobalState &gs, const TypeConstraint &tc) override;
 
     // Return the type of the underlying array that this tuple decays into
-    TypePtr elementType() const;
-    virtual TypePtr underlying() const override;
+    TypePtr elementType(const GlobalState &gs) const;
+    virtual TypePtr underlying(const GlobalState &gs) const override;
 };
 CheckSize(TupleType, 48, 8);
 
@@ -644,7 +642,7 @@ public:
                                  const std::vector<TypePtr> &targs) override;
     virtual int kind() final;
     virtual TypePtr _approximate(const GlobalState &gs, const TypeConstraint &tc) override;
-    virtual TypePtr underlying() const override;
+    virtual TypePtr underlying(const GlobalState &gs) const override;
 };
 CheckSize(MetaType, 24, 8);
 

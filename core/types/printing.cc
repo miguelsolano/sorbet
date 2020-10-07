@@ -49,15 +49,15 @@ string UnresolvedAppliedType::show(const GlobalState &gs) const {
 }
 
 string LiteralType::toStringWithTabs(const GlobalState &gs, int tabs) const {
-    return fmt::format("{}({})", this->underlying()->toStringWithTabs(gs, tabs), showValue(gs));
+    return fmt::format("{}({})", this->underlying(gs)->toStringWithTabs(gs, tabs), showValue(gs));
 }
 
 string LiteralType::show(const GlobalState &gs) const {
-    return fmt::format("{}({})", this->underlying()->show(gs), showValue(gs));
+    return fmt::format("{}({})", this->underlying(gs)->show(gs), showValue(gs));
 }
 
 string LiteralType::showValue(const GlobalState &gs) const {
-    SymbolRef undSymbol = cast_type<ClassType>(this->underlying().get())->symbol;
+    SymbolRef undSymbol = cast_type<ClassType>(this->underlying(gs).get())->symbol;
     if (undSymbol == Symbols::String()) {
         return fmt::format("\"{}\"", absl::CEscape(NameRef(gs, this->value).show(gs)));
     } else if (undSymbol == Symbols::Symbol()) {
@@ -124,7 +124,7 @@ string ShapeType::show(const GlobalState &gs) const {
         } else {
             fmt::format_to(buf, ", ");
         }
-        SymbolRef undSymbol = cast_type<ClassType>(cast_type<LiteralType>(key.get())->underlying().get())->symbol;
+        SymbolRef undSymbol = cast_type<ClassType>(cast_type<LiteralType>(key.get())->underlying(gs).get())->symbol;
         if (undSymbol == Symbols::Symbol()) {
             fmt::format_to(buf, "{}: {}", NameRef(gs, cast_type<LiteralType>(key.get())->value).show(gs),
                            (*valueIterator)->show(gs));
@@ -135,6 +135,10 @@ string ShapeType::show(const GlobalState &gs) const {
     }
     fmt::format_to(buf, "}}");
     return to_string(buf);
+}
+
+string ShapeType::showWithMoreInfo(const GlobalState &gs) const {
+    return fmt::format("{} (shape of {})", show(gs), this->underlying(gs)->show(gs));
 }
 
 string AliasType::toStringWithTabs(const GlobalState &gs, int tabs) const {

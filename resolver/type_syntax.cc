@@ -601,7 +601,7 @@ TypeSyntax::ResultType getResultTypeAndBindWithSelfTypeParams(core::MutableConte
             for (auto &el : arr->elems) {
                 elems.emplace_back(getResultTypeWithSelfTypeParams(ctx, el, sigBeingParsed, args.withoutSelfType()));
             }
-            result.type = core::TupleType::build(ctx, elems);
+            result.type = core::make_type<core::TupleType>(move(elems));
         },
         [&](ast::Hash *hash) {
             vector<core::TypePtr> keys;
@@ -621,7 +621,7 @@ TypeSyntax::ResultType getResultTypeAndBindWithSelfTypeParams(core::MutableConte
                     }
                 }
             }
-            result.type = core::make_type<core::ShapeType>(core::Types::hashOfUntyped(), keys, values);
+            result.type = core::make_type<core::ShapeType>(keys, values);
         },
         [&](ast::ConstantLit *i) {
             auto maybeAliased = i->symbol;

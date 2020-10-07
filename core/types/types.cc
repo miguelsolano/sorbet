@@ -206,7 +206,7 @@ TypePtr Types::dropSubtypesOf(const GlobalState &gs, const TypePtr &from, Symbol
             }
         },
         [&](ProxyType *c) {
-            if (dropSubtypesOf(gs, c->underlying(), klass)->isBottom()) {
+            if (dropSubtypesOf(gs, c->underlying(gs), klass)->isBottom()) {
                 result = Types::bottom();
             } else {
                 result = from;
@@ -234,7 +234,7 @@ bool Types::canBeTruthy(const GlobalState &gs, const TypePtr &what) {
             isTruthy = sym == core::Symbols::untyped() ||
                        (sym != core::Symbols::FalseClass() && sym != core::Symbols::NilClass());
         },
-        [&](ProxyType *c) { isTruthy = canBeTruthy(gs, c->underlying()); }, [&](Type *) { isTruthy = true; });
+        [&](ProxyType *c) { isTruthy = canBeTruthy(gs, c->underlying(gs)); }, [&](Type *) { isTruthy = true; });
 
     return isTruthy;
 }
@@ -260,14 +260,14 @@ TypePtr Types::approximateSubtract(const GlobalState &gs, const TypePtr &from, c
     return result;
 }
 
-TypePtr Types::dropLiteral(const TypePtr &tp) {
+TypePtr Types::dropLiteral(const GlobalState &gs, const TypePtr &tp) {
     if (auto *a = cast_type<LiteralType>(tp.get())) {
-        return a->underlying();
+        return a->underlying(gs);
     }
     return tp;
 }
 
-TypePtr Types::lubAll(const GlobalState &gs, vector<TypePtr> &elements) {
+TypePtr Types::lubAll(const GlobalState &gs, const vector<TypePtr> &elements) {
     TypePtr acc = Types::bottom();
     for (auto &el : elements) {
         acc = Types::lub(gs, acc, el);
@@ -287,7 +287,7 @@ TypePtr Types::rangeOf(const GlobalState &gs, const TypePtr &elem) {
 
 TypePtr Types::hashOf(const GlobalState &gs, const TypePtr &elem) {
     vector<TypePtr> tupleArgs{Types::Symbol(), elem};
-    vector<TypePtr> targs{Types::Symbol(), elem, TupleType::build(gs, tupleArgs)};
+    vector<TypePtr> targs{Types::Symbol(), elem, make_type<TupleType>(move(tupleArgs))};
     return make_type<AppliedType>(Symbols::Hash(), targs);
 }
 
@@ -310,9 +310,9 @@ ClassType::ClassType(SymbolRef symbol) : symbol(symbol) {
 }
 
 void ProxyType::_sanityCheck(const GlobalState &gs) {
-    ENFORCE(cast_type<ClassType>(this->underlying().get()) != nullptr ||
-            cast_type<AppliedType>(this->underlying().get()) != nullptr);
-    this->underlying()->sanityCheck(gs);
+    ENFORCE(cast_type<ClassType>(this->underlying(gs).get()) != nullptr ||
+            cast_type<AppliedType>(this->underlying(gs).get()) != nullptr);
+    this->underlying(gs)->sanityCheck(gs);
 }
 
 bool Type::isUntyped() const {
@@ -358,7 +358,7 @@ LiteralType::LiteralType(bool val)
     categoryCounterInc("types.allocated", "literaltype");
 }
 
-TypePtr LiteralType::underlying() const {
+TypePtr LiteralType::underlying(const GlobalState &gs) const {
     switch (literalKind) {
         case LiteralTypeKind::Integer:
             return Types::Integer();
@@ -376,26 +376,20 @@ TypePtr LiteralType::underlying() const {
     Exception::raise("should never be reached");
 }
 
-TupleType::TupleType(TypePtr underlying, vector<TypePtr> elements)
-    : elems(move(elements)), underlying_(std::move(underlying)) {
+TupleType::TupleType(vector<TypePtr> elements) : elems(move(elements)) {
     categoryCounterInc("types.allocated", "tupletype");
-}
-
-TypePtr TupleType::build(const GlobalState &gs, vector<TypePtr> elements) {
-    TypePtr underlying = Types::arrayOf(gs, Types::dropLiteral(Types::lubAll(gs, elements)));
-    return make_type<TupleType>(move(underlying), move(elements));
 }
 
 AndType::AndType(const TypePtr &left, const TypePtr &right) : left(move(left)), right(move(right)) {
     categoryCounterInc("types.allocated", "andtype");
 }
 
-bool LiteralType::equals(const LiteralType &rhs) const {
+bool LiteralType::equals(const GlobalState &gs, const LiteralType &rhs) const {
     if (this->value != rhs.value) {
         return false;
     }
-    auto *lklass = cast_type<ClassType>(this->underlying().get());
-    auto *rklass = cast_type<ClassType>(rhs.underlying().get());
+    auto *lklass = cast_type<ClassType>(this->underlying(gs).get());
+    auto *rklass = cast_type<ClassType>(rhs.underlying(gs).get());
     if (!lklass || !rklass) {
         return false;
     }
@@ -408,27 +402,31 @@ OrType::OrType(const TypePtr &left, const TypePtr &right) : left(move(left)), ri
 
 void TupleType::_sanityCheck(const GlobalState &gs) {
     ProxyType::_sanityCheck(gs);
-    auto *applied = cast_type<AppliedType>(this->underlying().get());
+    auto *applied = cast_type<AppliedType>(this->underlying(gs).get());
     ENFORCE(applied);
     ENFORCE(applied->klass == Symbols::Array());
 }
 
-ShapeType::ShapeType() : underlying_(Types::hashOfUntyped()) {
+ShapeType::ShapeType() {
     categoryCounterInc("types.allocated", "shapetype");
 }
 
-ShapeType::ShapeType(TypePtr underlying, vector<TypePtr> keys, vector<TypePtr> values)
-    : keys(move(keys)), values(move(values)), underlying_(std::move(underlying)) {
+ShapeType::ShapeType(vector<TypePtr> keys, vector<TypePtr> values) : keys(move(keys)), values(move(values)) {
     DEBUG_ONLY(for (auto &k : this->keys) { ENFORCE(cast_type<LiteralType>(k.get()) != nullptr); };);
     categoryCounterInc("types.allocated", "shapetype");
 }
 
-TypePtr ShapeType::underlying() const {
-    return this->underlying_;
+TypePtr ShapeType::underlying(const GlobalState &gs) const {
+    auto keysLub = Types::lubAll(gs, this->keys);
+    auto valuesLub = Types::lubAll(gs, this->values);
+    vector<TypePtr> tupleArgs{keysLub, valuesLub};
+    vector<TypePtr> targs{keysLub, valuesLub, make_type<TupleType>(move(tupleArgs))};
+    return make_type<AppliedType>(Symbols::Hash(), targs);
 }
 
-TypePtr TupleType::underlying() const {
-    return this->underlying_;
+TypePtr TupleType::underlying(const GlobalState &gs) const {
+    // TODO(jez) memoize?
+    return Types::arrayOf(gs, Types::lubAll(gs, this->elems));
 }
 
 void ShapeType::_sanityCheck(const GlobalState &gs) {
@@ -822,8 +820,8 @@ optional<int> SendAndBlockLink::fixedArity() const {
     return arity;
 }
 
-TypePtr TupleType::elementType() const {
-    auto *ap = cast_type<AppliedType>(this->underlying().get());
+TypePtr TupleType::elementType(const GlobalState &gs) const {
+    auto *ap = cast_type<AppliedType>(this->underlying(gs).get());
     ENFORCE(ap);
     ENFORCE(ap->klass == Symbols::Array());
     ENFORCE(ap->targs.size() == 1);
@@ -865,7 +863,7 @@ TypePtr Types::widen(const GlobalState &gs, const TypePtr &type) {
     typecase(
         type.get(), [&](AndType *andType) { ret = all(gs, widen(gs, andType->left), widen(gs, andType->right)); },
         [&](OrType *orType) { ret = any(gs, widen(gs, orType->left), widen(gs, orType->right)); },
-        [&](ProxyType *proxy) { ret = Types::widen(gs, proxy->underlying()); },
+        [&](ProxyType *proxy) { ret = Types::widen(gs, proxy->underlying(gs)); },
         [&](AppliedType *appliedType) {
             vector<TypePtr> newTargs;
             newTargs.reserve(appliedType->targs.size());
@@ -903,7 +901,7 @@ TypePtr Types::unwrapSelfTypeParam(Context ctx, const TypePtr &type) {
                 values.emplace_back(unwrapSelfTypeParam(ctx, value));
             }
 
-            ret = make_type<ShapeType>(unwrapSelfTypeParam(ctx, shape->underlying_), shape->keys, std::move(values));
+            ret = make_type<ShapeType>(shape->keys, std::move(values));
         },
         [&](TupleType *tuple) {
             std::vector<TypePtr> elems;
@@ -913,7 +911,7 @@ TypePtr Types::unwrapSelfTypeParam(Context ctx, const TypePtr &type) {
                 elems.emplace_back(unwrapSelfTypeParam(ctx, value));
             }
 
-            ret = make_type<TupleType>(unwrapSelfTypeParam(ctx, tuple->underlying_), std::move(elems));
+            ret = make_type<TupleType>(std::move(elems));
         },
         [&](MetaType *meta) { ret = make_type<MetaType>(unwrapSelfTypeParam(ctx, meta->wrapped)); },
         [&](AppliedType *appliedType) {
