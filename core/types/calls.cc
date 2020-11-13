@@ -370,14 +370,15 @@ TypePtr unwrapType(const GlobalState &gs, Loc loc, const TypePtr &tp) {
         return metaType->wrapped;
     }
 
-    if (auto *classType = cast_type<ClassType>(tp)) {
-        if (classType->symbol.data(gs)->derivesFrom(gs, core::Symbols::T_Enum())) {
+    if (isa_type<ClassType>(tp)) {
+        auto classType = cast_type_nonnull<ClassType>(tp);
+        if (classType.symbol.data(gs)->derivesFrom(gs, core::Symbols::T_Enum())) {
             // T::Enum instances are allowed to stand for themselves in type syntax positions.
             // See the note in type_syntax.cc regarding T::Enum.
             return tp;
         }
 
-        SymbolRef attachedClass = classType->symbol.data(gs)->attachedClass(gs);
+        SymbolRef attachedClass = classType.symbol.data(gs)->attachedClass(gs);
         if (!attachedClass.exists()) {
             if (auto e = gs.beginError(loc, errors::Infer::BareTypeUsage)) {
                 e.setHeader("Unsupported usage of bare type");
@@ -899,7 +900,7 @@ DispatchResult dispatchCallSymbol(const GlobalState &gs, const DispatchArgs &arg
                 } else if (spec.flags.isRepeated) {
                     for (auto it = hash->keys.begin(); it != hash->keys.end(); ++it) {
                         auto key = cast_type<LiteralType>(*it);
-                        SymbolRef klass = cast_type<ClassType>(key->underlying())->symbol;
+                        SymbolRef klass = cast_type_nonnull<ClassType>(key->underlying()).symbol;
                         if (klass != Symbols::Symbol()) {
                             continue;
                         }
@@ -929,7 +930,7 @@ DispatchResult dispatchCallSymbol(const GlobalState &gs, const DispatchArgs &arg
 
                 auto arg = absl::c_find_if(hash->keys, [&](const TypePtr &litType) {
                     auto lit = cast_type<LiteralType>(litType);
-                    return cast_type<ClassType>(lit->underlying())->symbol == Symbols::Symbol() &&
+                    return cast_type_nonnull<ClassType>(lit->underlying()).symbol == Symbols::Symbol() &&
                            lit->value == spec.name._id;
                 });
                 if (arg == hash->keys.end()) {
@@ -954,7 +955,7 @@ DispatchResult dispatchCallSymbol(const GlobalState &gs, const DispatchArgs &arg
             }
             for (auto &keyType : hash->keys) {
                 auto key = cast_type<LiteralType>(keyType);
-                SymbolRef klass = cast_type<ClassType>(key->underlying())->symbol;
+                SymbolRef klass = cast_type_nonnull<ClassType>(key->underlying()).symbol;
                 if (klass == Symbols::Symbol() && consumed.find(NameRef(gs, key->value)) != consumed.end()) {
                     continue;
                 }
@@ -1843,9 +1844,9 @@ private:
         auto &blockPreType = dispatched.main.blockPreType;
         if (blockPreType && !Types::isSubTypeUnderConstraint(gs, *constr, passedInBlockType, blockPreType,
                                                              UntypedMode::AlwaysCompatible)) {
-            auto *passedInProcClass = cast_type<ClassType>(passedInBlockType);
             auto nonNilableBlockType = Types::dropNil(gs, blockPreType);
-            if (passedInProcClass && passedInProcClass->symbol == Symbols::Proc() &&
+            if (isa_type<ClassType>(passedInBlockType) &&
+                cast_type_nonnull<ClassType>(passedInBlockType).symbol == Symbols::Proc() &&
                 Types::isSubType(gs, nonNilableBlockType, passedInBlockType)) {
                 // If a block of unknown arity is passed in, but the function was declared with a known arity,
                 // raise an error in strict mode.
