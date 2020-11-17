@@ -427,7 +427,7 @@ void validateFinal(core::Context ctx, const core::SymbolRef klass, const ast::Cl
 
 void validateZSuper(const core::GlobalState &gs, const core::SymbolRef klass) {
     for (const auto [name, sym] : klass.data(gs)->members()) {
-        if (!(sym.exists() && sym.data(gs)->isMethod() && sym.data(gs)->isMethodZSuper())) {
+        if (!(sym.exists() && sym.data(gs)->isMethod() && sym.data(gs)->isZSuperMethod())) {
             continue;
         }
 
@@ -449,7 +449,7 @@ void validateZSuper(const core::GlobalState &gs, const core::SymbolRef klass) {
             }
         } else {
             ENFORCE(parentMethod.data(gs)->isMethod());
-            ENFORCE(!parentMethod.data(gs)->isMethodZSuper());
+            ENFORCE(!parentMethod.data(gs)->isZSuperMethod());
         }
     }
 }
